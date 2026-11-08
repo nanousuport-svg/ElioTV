@@ -16,7 +16,8 @@ jobs:
         with:
           channel: stable
           cache: true
-      - run: flutter build windows --release
+      - run: for i in 1 2 3; do flutter build windows --release && exit 0; echo "Essai $i échoué, nouvel essai dans 60 s"; sleep 60; done; exit 1
+        shell: bash
       - uses: actions/upload-artifact@v4
         with:
           name: ElioTV-Windows
@@ -34,7 +35,8 @@ jobs:
         with:
           channel: stable
           cache: true
-      - run: flutter build apk --release
+      # Le serveur de téléchargement de Gradle est parfois indisponible (erreurs 503/504) : 3 essais.
+      - run: for i in 1 2 3; do flutter build apk --release && exit 0; echo "Essai $i échoué, nouvel essai dans 60 s"; sleep 60; done; exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: ElioTV-Android
