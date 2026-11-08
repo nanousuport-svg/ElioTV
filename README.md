@@ -26,7 +26,7 @@ Prérequis : Flutter (`brew install --cask flutter`).
 | iPhone / iPad | `flutter build ios` (composant iOS de Xcode requis ; installation sur appareil = compte Apple) | |
 
 ## GitHub (gratuit)
-`.github/workflows/build.yml` compile Windows et Android à chaque envoi sur la branche `main` ;
+`.github/workflows/build.yml` compile Windows (dossier + installeur `ElioTV-Setup.exe` via `windows/installer/eliotv.iss`) et Android à chaque envoi sur la branche `main` ;
 les fichiers sont téléchargeables dans l'onglet **Actions** du dépôt.
 
 ## Tests

@@ -120,7 +120,7 @@ const FAQ = [
 
 const DOWNLOADS = [
   { os: 'android', name: 'Android', detail: 'Téléphone, tablette, Android TV, Fire TV · 92 Mo', file: 'ElioTV-Android.apk', cta: "Télécharger l'APK" },
-  { os: 'windows', name: 'Windows', detail: 'Windows 10 et 11, 64 bits · 31 Mo', file: 'ElioTV-Windows.zip', cta: 'Télécharger' },
+  { os: 'windows', name: 'Windows', detail: 'Installeur · Windows 10 et 11, 64 bits · 25 Mo', file: 'ElioTV-Setup.exe', cta: "Télécharger l'installeur" },
   { os: 'mac', name: 'Mac', detail: 'Puce Apple ou Intel, macOS 12+ · 34 Mo', file: 'ElioTV-Mac.zip', cta: 'Télécharger' },
 ] as const
 
