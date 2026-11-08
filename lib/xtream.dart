@@ -76,26 +76,40 @@ class XtreamClient {
     );
   }
 
-  Future<Catalog> loadCatalog() async {
+  /// TV en direct : indispensable, et chargée seule pour s'afficher au plus vite
+  /// (les films d'un gros abonnement pèsent souvent des dizaines de Mo).
+  Future<Catalog> loadLive({void Function(int received)? onProgress}) async {
+    final progress = DownloadProgress(onProgress);
     final results = await Future.wait([
-      _categories(ContentKind.live),
-      _items(ContentKind.live),
-      _optional(_categories(ContentKind.movie)),
-      _optional(_items(ContentKind.movie)),
-      _optional(_categories(ContentKind.series)),
-      _optional(_items(ContentKind.series)),
+      _categories(ContentKind.live, progress.slot(0)),
+      _items(ContentKind.live, progress.slot(1)),
     ]);
-    // La TV est indispensable ; films et séries sont facultatifs (certains abonnements n'en ont pas).
+    return Catalog(
+      categories: results[0] as List<MediaCategory>,
+      items: results[1] as List<MediaItem>,
+      updated: DateTime.now(),
+    );
+  }
+
+  /// Films et séries : facultatifs (certains abonnements n'en ont pas).
+  Future<Catalog> loadLibrary({
+    void Function(int received)? onProgress,
+  }) async {
+    final progress = DownloadProgress(onProgress);
+    final results = await Future.wait([
+      _optional(_categories(ContentKind.movie, progress.slot(0))),
+      _optional(_items(ContentKind.movie, progress.slot(1))),
+      _optional(_categories(ContentKind.series, progress.slot(2))),
+      _optional(_items(ContentKind.series, progress.slot(3))),
+    ]);
     final catalog = Catalog(
       categories: [
         ...results[0] as List<MediaCategory>,
         ...results[2] as List<MediaCategory>,
-        ...results[4] as List<MediaCategory>,
       ],
       items: [
         ...results[1] as List<MediaItem>,
         ...results[3] as List<MediaItem>,
-        ...results[5] as List<MediaItem>,
       ],
       updated: DateTime.now(),
     );
@@ -122,8 +136,14 @@ class XtreamClient {
     ContentKind.series: 'get_series',
   };
 
-  Future<List<MediaCategory>> _categories(ContentKind kind) async {
-    final list = await fetchJson(_api(_categoryActions[kind]));
+  Future<List<MediaCategory>> _categories(
+    ContentKind kind, [
+    void Function(int)? onProgress,
+  ]) async {
+    final list = await fetchJson(
+      _api(_categoryActions[kind]),
+      onProgress: onProgress,
+    );
     if (list is! List) return [];
     return [
       for (final c in list.whereType<Map>())
@@ -136,8 +156,14 @@ class XtreamClient {
     ];
   }
 
-  Future<List<MediaItem>> _items(ContentKind kind) async {
-    final list = await fetchJson(_api(_itemActions[kind]));
+  Future<List<MediaItem>> _items(
+    ContentKind kind, [
+    void Function(int)? onProgress,
+  ]) async {
+    final list = await fetchJson(
+      _api(_itemActions[kind]),
+      onProgress: onProgress,
+    );
     if (list is! List) return [];
     final items = <MediaItem>[];
     for (final s in list.whereType<Map>()) {

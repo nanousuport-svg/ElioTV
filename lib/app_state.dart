@@ -349,10 +349,23 @@ class AppState extends ChangeNotifier {
     final profile = active;
     if (profile == null || isRefreshing) return;
     isRefreshing = true;
-    if (catalog.items.isEmpty) _setLoading('Chargement des chaînes…');
+    // Premier chargement : la TV s'affiche dès qu'elle est prête, films et séries suivent.
+    // Sinon la liste en cache reste affichée jusqu'à ce que la nouvelle soit complète.
+    final firstLoad = catalog.items.isEmpty;
+    if (firstLoad) _setLoading('Chargement des chaînes…');
     notifyListeners();
     try {
-      final fresh = await _fetchCatalog(profile);
+      final fresh = await _fetchCatalog(
+        profile,
+        onLive: firstLoad
+            ? (live) {
+                if (active?.id != profile.id) return;
+                _apply(live);
+                isLoading = false;
+                notifyListeners();
+              }
+            : null,
+      );
       if (active?.id != profile.id) return;
       if (fresh.items.isEmpty) throw ElioError.emptyPlaylist;
       _apply(fresh);
@@ -379,20 +392,52 @@ class AppState extends ChangeNotifier {
   }
 
   /// Téléchargement et analyse dans un isolate : l'interface reste fluide.
-  Future<Catalog> _fetchCatalog(Profile profile) async {
+  /// Pour Xtream, [onLive] reçoit la TV dès qu'elle est chargée, avant les films et séries.
+  Future<Catalog> _fetchCatalog(
+    Profile profile, {
+    void Function(Catalog live)? onLive,
+  }) async {
     switch (profile.type) {
       case SourceType.xtream:
         final client = _client(profile);
         if (client == null) throw ElioError.missingPassword;
-        return Isolate.run(client.loadCatalog);
+        final live = await _xtreamLive(
+          client,
+          _progress('Chargement des chaînes'),
+        );
+        if (live.items.isEmpty) throw ElioError.emptyPlaylist;
+        onLive?.call(live);
+        var library = Catalog();
+        try {
+          library = await _xtreamLibrary(
+            client,
+            _progress('Chargement des films et séries'),
+          );
+        } catch (_) {
+          // Films et séries indisponibles : la TV reste utilisable.
+        }
+        return Catalog(
+          categories: [...live.categories, ...library.categories],
+          items: [...live.items, ...library.items],
+          updated: DateTime.now(),
+        );
       case SourceType.m3uUrl:
-        final url = Uri.parse(profile.value);
-        return Isolate.run(() async => parseM3U(await fetchBytes(url)));
+        return _m3uUrl(
+          Uri.parse(profile.value),
+          _progress('Chargement de la playlist'),
+        );
       case SourceType.m3uFile:
         final path = profile.value;
         return Isolate.run(() async => parseM3U(await _readFile(path)));
     }
   }
+
+  /// Affiche la quantité reçue sur l'écran de chargement, pour qu'on voie que ça avance.
+  void Function(int) _progress(String label) => (bytes) {
+    if (!isLoading) return;
+    loadingMessage = '$label… ${formatBytes(bytes)} reçus';
+    notifyListeners();
+  };
 
   XtreamClient? _client(Profile? profile) {
     if (profile == null || profile.type != SourceType.xtream) return null;
@@ -688,4 +733,35 @@ class AppState extends ChangeNotifier {
 
 Future<List<int>> _readFile(String path) async {
   return await File(path).readAsBytes();
+}
+
+// Fonctions de premier niveau : une fermeture créée dans AppState emporterait l'état entier
+// (lecteur vidéo compris) vers l'isolate, ce qui est impossible.
+
+Future<Catalog> _xtreamLive(XtreamClient client, void Function(int) progress) =>
+    _inIsolate((send) => client.loadLive(onProgress: send), progress);
+
+Future<Catalog> _xtreamLibrary(
+  XtreamClient client,
+  void Function(int) progress,
+) => _inIsolate((send) => client.loadLibrary(onProgress: send), progress);
+
+Future<Catalog> _m3uUrl(Uri url, void Function(int) progress) => _inIsolate(
+  (send) async => parseM3U(await fetchBytes(url, onProgress: send)),
+  progress,
+);
+
+/// Lance [task] dans un isolate et relaie sa progression (octets reçus) vers [progress].
+Future<T> _inIsolate<T>(
+  Future<T> Function(void Function(Object?) send) task,
+  void Function(int) progress,
+) async {
+  final port = ReceivePort();
+  port.cast<int>().listen(progress);
+  final send = port.sendPort;
+  try {
+    return await Isolate.run(() => task(send.send));
+  } finally {
+    port.close();
+  }
 }

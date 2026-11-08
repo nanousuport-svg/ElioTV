@@ -252,6 +252,9 @@ class ElioError implements Exception {
   static final missingPassword = ElioError(
     'Mot de passe introuvable. Supprime ce fournisseur puis ajoute-le à nouveau.',
   );
+  static final timeout = ElioError(
+    'Le serveur met trop de temps à répondre. Réessaie dans un instant.',
+  );
 
   static String describe(Object error) {
     if (error is ElioError) return error.message;

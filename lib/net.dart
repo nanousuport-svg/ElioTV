@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -10,25 +12,78 @@ const httpHeaders = {'User-Agent': userAgent};
 
 final _client = http.Client();
 
-Future<List<int>> fetchBytes(
+/// Une grosse liste peut mettre plusieurs minutes à arriver : pas de limite de durée totale,
+/// mais on abandonne si le serveur ne répond pas, ou cesse d'envoyer des données.
+const _connectTimeout = Duration(seconds: 25);
+const _idleTimeout = Duration(seconds: 45);
+
+/// [onProgress] reçoit le nombre d'octets reçus jusqu'ici.
+Future<Uint8List> fetchBytes(
   Uri url, {
-  Duration timeout = const Duration(seconds: 90),
+  void Function(int received)? onProgress,
 }) async {
+  final request = http.Request('GET', url)..headers.addAll(httpHeaders);
   final response = await _client
-      .get(url, headers: httpHeaders)
-      .timeout(timeout);
-  if (response.statusCode == 401 || response.statusCode == 403)
-    throw ElioError.badCredentials;
+      .send(request)
+      .timeout(
+        _connectTimeout,
+        onTimeout: () => throw ElioError.timeout,
+      );
   if (response.statusCode < 200 || response.statusCode >= 300) {
+    unawaited(response.stream.listen(null).cancel());
+    if (response.statusCode == 401 || response.statusCode == 403)
+      throw ElioError.badCredentials;
     throw ElioError(
       'Le serveur a répondu avec une erreur (${response.statusCode}).',
     );
   }
-  return response.bodyBytes;
+  final body = BytesBuilder(copy: false);
+  await for (final chunk in response.stream.timeout(
+    _idleTimeout,
+    onTimeout: (sink) => sink.addError(ElioError.timeout),
+  )) {
+    body.add(chunk);
+    onProgress?.call(body.length);
+  }
+  return body.takeBytes();
 }
 
-Future<dynamic> fetchJson(Uri url) async =>
-    jsonDecode(utf8.decode(await fetchBytes(url), allowMalformed: true));
+Future<dynamic> fetchJson(
+  Uri url, {
+  void Function(int received)? onProgress,
+}) async => jsonDecode(
+  utf8.decode(
+    await fetchBytes(url, onProgress: onProgress),
+    allowMalformed: true,
+  ),
+);
+
+/// Additionne les octets reçus par plusieurs téléchargements simultanés
+/// et les signale au plus une fois par 256 Ko.
+class DownloadProgress {
+  DownloadProgress(this.report);
+
+  final void Function(int total)? report;
+  final _received = <int, int>{};
+  int _lastReported = 0;
+
+  void Function(int) slot(int id) => (bytes) {
+    _received[id] = bytes;
+    final total = _received.values.fold(0, (a, b) => a + b);
+    if (total - _lastReported >= 256 * 1024) {
+      _lastReported = total;
+      report?.call(total);
+    }
+  };
+}
+
+/// « 12,4 Mo » pour les messages de chargement.
+String formatBytes(int bytes) {
+  final mb = bytes / (1024 * 1024);
+  return mb < 1
+      ? '${(bytes / 1024).round()} Ko'
+      : '${mb.toStringAsFixed(1).replaceAll('.', ',')} Mo';
+}
 
 /// Lecture tolérante du JSON Xtream (identifiants tantôt nombres, tantôt texte).
 class J {

@@ -1,5 +1,6 @@
 # Faux serveur Xtream pour les tests (données de démo).
 # Lancer : python3 tool/mock_xtream.py  →  http://127.0.0.1:8765, identifiants demo / demo+1
+# Gros fournisseur simulé : python3 tool/mock_xtream.py --big  (20 000 chaînes, 80 000 films envoyés à ~1 Mo/s)
 import json, base64, time, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -10,10 +11,18 @@ MP4 = "https://test-videos.co.uk/vids/bigbuckbunny/mkv/360/Big_Buck_Bunny_360_10
 b64 = lambda s: base64.b64encode(s.encode()).decode()
 now = int(time.time())
 
+BIG = "--big" in sys.argv
+BIG_LIVE = [{"num": i, "name": f"FR: Chaîne {i}", "stream_id": 10000 + i, "stream_icon": "", "category_id": "1"} for i in range(1, 20001)]
+BIG_VOD = [{"name": f"Film numéro {i} ({1980 + i % 45})", "stream_id": 200000 + i, "category_id": "10", "container_extension": "mkv",
+            "rating": "7.1", "added": str(now - i), "genre": "Action, Aventure", "stream_icon": f"http://img.example/{i}.jpg"} for i in range(1, 80001)]
+
 class H(BaseHTTPRequestHandler):
-    def send_json(self, obj):
+    def send_json(self, obj, rate=0):
         b = json.dumps(obj).encode(); self.send_response(200)
-        self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+        self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(b))); self.end_headers()
+        if not rate: return self.wfile.write(b)
+        for i in range(0, len(b), 64 * 1024):  # envoi lent : ~rate octets par seconde
+            self.wfile.write(b[i:i + 64 * 1024]); time.sleep(64 * 1024 / rate)
     def redirect(self, url):
         self.send_response(302); self.send_header("Location", url); self.end_headers()
     def do_GET(self):
@@ -25,6 +34,8 @@ class H(BaseHTTPRequestHandler):
             a = q.get("action")
             if a is None: return self.send_json({"user_info": {"auth": 1, "status": "Active", "exp_date": str(now + 90*86400), "max_connections": "1"}})
             if a == "get_live_categories": return self.send_json([{"category_id": "1", "category_name": "Généraliste"}, {"category_id": 2, "category_name": "Sport"}])
+            if BIG and a == "get_live_streams": return self.send_json(BIG_LIVE, rate=1_000_000)
+            if BIG and a == "get_vod_streams": return self.send_json(BIG_VOD, rate=1_000_000)
             if a == "get_live_streams": return self.send_json([
                 {"num": 1, "name": "Démo HD", "stream_id": 1, "stream_icon": "", "category_id": "1"},
                 {"num": 2, "name": "Apple Bipbop", "stream_id": "2", "stream_icon": None, "category_id": "1"},
