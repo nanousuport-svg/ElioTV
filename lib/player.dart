@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import 'live_relay.dart';
 import 'net.dart';
 import 'storage.dart';
 
@@ -101,6 +102,11 @@ class PlayerController extends ChangeNotifier {
     sourceUrl = url;
     isLive = live;
     _candidates = streamCandidates(url);
+    // Direct en MPEG-TS : d'abord via le relais local (reconnexions sans retour en arrière),
+    // puis les adresses habituelles si le relais échoue.
+    final relay = LiveRelay.instance;
+    if (live && relay != null && url.toLowerCase().endsWith('.ts'))
+      _candidates = [relay.wrap(url), ..._candidates.skip(1), url];
     _attempt = 0;
     _start();
   }

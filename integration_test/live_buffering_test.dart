@@ -1,4 +1,5 @@
 import 'package:eliotv/app_state.dart';
+import 'package:eliotv/live_relay.dart';
 import 'package:eliotv/main.dart';
 import 'package:eliotv/player.dart';
 import 'package:eliotv/storage.dart';
@@ -17,6 +18,7 @@ void main() {
   testWidgets('pas de mise en mémoire à répétition en direct', (tester) async {
     MediaKit.ensureInitialized();
     await Storage.init();
+    await LiveRelay.start();
     final state = AppState();
     final player = state.player;
     // L'app complète est affichée : le lecteur a besoin de sa surface vidéo pour sortir des images.

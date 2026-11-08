@@ -3,6 +3,8 @@
 # Gros fournisseur simulé : python3 tool/mock_xtream.py --big  (20 000 chaînes, 80 000 films envoyés à ~1 Mo/s)
 # Direct irrégulier : python3 tool/mock_xtream.py --live-ts fichier.ts  →  /live/demo/demo+1/77.ts envoyé au rythme
 # du direct, avec un retard de 1,5 s toutes les 3 s (rattrapé ensuite), comme un vrai fournisseur IPTV.
+#   et /live/demo/demo+1/78.ts : direct dont la connexion est coupée toutes les 10 s ; à chaque reconnexion,
+#   le serveur renvoie ses 3 dernières secondes (comme beaucoup de panneaux Xtream).
 import json, base64, time, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -58,6 +60,7 @@ class H(BaseHTTPRequestHandler):
             return self.send_json([])
         p = u.path
         if LIVE_TS and p.endswith("/77.ts"): return self.send_live()
+        if LIVE_TS and p.endswith("/78.ts"): return self.send_rewinding_live()
         if p.startswith("/live/demo/demo+1/1.m3u8") or p.startswith("/live/demo/demo%2B1/1.m3u8"): return self.redirect(HLS)
         if "/live/" in p and p.endswith("/2.m3u8"): return self.redirect(HLS2)
         if "/movie/" in p: return self.redirect(MP4)
@@ -76,4 +79,22 @@ class H(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+    def send_rewinding_live(self):
+        global CHANNEL_START
+        data = open(LIVE_TS, "rb").read(); rate = len(data) / LIVE_SECONDS; chunk = 188 * 340
+        now = time.time()
+        if CHANNEL_START is None or now - CHANNEL_START > LIVE_SECONDS - 20: CHANNEL_START = now
+        live_pos = (now - CHANNEL_START) * rate
+        pos = max(0, int(live_pos - 3 * rate)) // 188 * 188  # le serveur repart 3 s en arrière
+        self.send_response(200); self.send_header("Content-Type", "video/mp2t"); self.end_headers()
+        try:
+            while pos < len(data) and time.time() - now < 10:  # connexion coupée au bout de 10 s
+                due = CHANNEL_START + pos / rate
+                if due > time.time(): time.sleep(due - time.time())
+                self.wfile.write(data[pos:pos + chunk]); self.wfile.flush(); pos += chunk
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        self.close_connection = True
+
+CHANNEL_START = None
 ThreadingHTTPServer(("127.0.0.1", 8765), H).serve_forever()

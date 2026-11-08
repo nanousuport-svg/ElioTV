@@ -1,4 +1,5 @@
 import 'package:eliotv/app_state.dart';
+import 'package:eliotv/live_relay.dart';
 import 'package:eliotv/main.dart';
 import 'package:eliotv/models.dart';
 import 'package:eliotv/player.dart';
@@ -24,6 +25,7 @@ void main() {
   testWidgets('connexion, chaîne et film', (tester) async {
     MediaKit.ensureInitialized();
     await Storage.init();
+    await LiveRelay.start();
     final state = AppState();
     await tester.pumpWidget(MultiProvider(providers: [
       ChangeNotifierProvider.value(value: state),

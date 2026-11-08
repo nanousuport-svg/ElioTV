@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'app_state.dart';
 import 'device.dart';
+import 'live_relay.dart';
 import 'storage.dart';
 import 'ui/home_page.dart';
 import 'ui/login_page.dart';
@@ -13,6 +14,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   await Storage.init();
+  await LiveRelay.start();
   await Device.init();
   // Sur Android, Flutter suppose un écran tactile et masque le surlignage de l'élément choisi :
   // à la télécommande, il doit toujours être visible.
