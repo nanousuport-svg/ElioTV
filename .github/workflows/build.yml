@@ -22,6 +22,17 @@ jobs:
         with:
           name: ElioTV-Windows
           path: build/windows/x64/runner/Release
+      # Installeur en un seul fichier (ElioTV-Setup.exe) avec Inno Setup, installé si l'image ne l'a pas déjà.
+      - name: Installeur Windows
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc windows\installer\eliotv.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ElioTV-Setup
+          path: build/installer/ElioTV-Setup.exe
 
   android:
     runs-on: ubuntu-latest
