@@ -1,6 +1,8 @@
 # Faux serveur Xtream pour les tests (données de démo).
 # Lancer : python3 tool/mock_xtream.py  →  http://127.0.0.1:8765, identifiants demo / demo+1
 # Gros fournisseur simulé : python3 tool/mock_xtream.py --big  (20 000 chaînes, 80 000 films envoyés à ~1 Mo/s)
+# Direct irrégulier : python3 tool/mock_xtream.py --live-ts fichier.ts  →  /live/demo/demo+1/77.ts envoyé au rythme
+# du direct, avec un retard de 1,5 s toutes les 3 s (rattrapé ensuite), comme un vrai fournisseur IPTV.
 import json, base64, time, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -12,6 +14,8 @@ b64 = lambda s: base64.b64encode(s.encode()).decode()
 now = int(time.time())
 
 BIG = "--big" in sys.argv
+LIVE_TS = sys.argv[sys.argv.index("--live-ts") + 1] if "--live-ts" in sys.argv else None
+LIVE_SECONDS = 120
 BIG_LIVE = [{"num": i, "name": f"FR: Chaîne {i}", "stream_id": 10000 + i, "stream_icon": "", "category_id": "1"} for i in range(1, 20001)]
 BIG_VOD = [{"name": f"Film numéro {i} ({1980 + i % 45})", "stream_id": 200000 + i, "category_id": "10", "container_extension": "mkv",
             "rating": "7.1", "added": str(now - i), "genre": "Action, Aventure", "stream_icon": f"http://img.example/{i}.jpg"} for i in range(1, 80001)]
@@ -53,10 +57,23 @@ class H(BaseHTTPRequestHandler):
                 {"title": b64("Film du soir"), "start_timestamp": str(now + 1200), "stop_timestamp": str(now + 7200)}]})
             return self.send_json([])
         p = u.path
+        if LIVE_TS and p.endswith("/77.ts"): return self.send_live()
         if p.startswith("/live/demo/demo+1/1.m3u8") or p.startswith("/live/demo/demo%2B1/1.m3u8"): return self.redirect(HLS)
         if "/live/" in p and p.endswith("/2.m3u8"): return self.redirect(HLS2)
         if "/movie/" in p: return self.redirect(MP4)
         if "/series/" in p: return self.redirect(MP4)
         self.send_response(404); self.end_headers()
+
+    def send_live(self):
+        data = open(LIVE_TS, "rb").read(); step = 0.25; chunk = int(len(data) / LIVE_SECONDS * step)
+        self.send_response(200); self.send_header("Content-Type", "video/mp2t"); self.end_headers()
+        start = time.time()
+        try:
+            for k, i in enumerate(range(0, len(data), chunk)):
+                due = start + k * step + (1.5 if k % 12 == 11 else 0)  # retard ponctuel, puis rattrapage
+                if due > time.time(): time.sleep(due - time.time())
+                self.wfile.write(data[i:i + chunk]); self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
 ThreadingHTTPServer(("127.0.0.1", 8765), H).serve_forever()

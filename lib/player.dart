@@ -80,6 +80,9 @@ class PlayerController extends ChangeNotifier {
       'network-timeout': '10',
       'cache': 'yes',
       'cache-pause-initial': 'no', // démarre dès la première image
+      // En direct, les données arrivent au rythme de la lecture : sans réserve, chaque à-coup
+      // du serveur relance « Mise en mémoire… ». Après un arrêt, on repart avec 4 s d'avance.
+      'cache-pause-wait': '4',
       'demuxer-lavf-analyzeduration':
           '1', // analyse du flux raccourcie : zapping rapide
       'demuxer-lavf-probesize': '1000000',
