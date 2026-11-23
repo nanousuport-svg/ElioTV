@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app_state.dart';
-import '../country.dart';
 import '../device.dart';
 import '../models.dart';
 import '../player.dart';
+import 'language_picker.dart';
 import 'player_view.dart';
 import 'theme.dart';
 
@@ -16,11 +16,13 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth >= 900) return const _WideLayout();
-        return const _NarrowLayout();
-      },
+    return LanguagePrompt(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth >= 900) return const _WideLayout();
+          return const _NarrowLayout();
+        },
+      ),
     );
   }
 }
@@ -229,16 +231,22 @@ class _ProviderMenu extends StatelessWidget {
     return PopupMenuButton<int>(
       tooltip: 'Options',
       icon: const Icon(Icons.more_vert_rounded),
-      onSelected: (v) => v == 0 ? state.refresh() : state.signOut(),
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: 0, child: Text('Actualiser la liste')),
-        PopupMenuItem(value: 1, child: Text('Changer de fournisseur')),
+      onSelected: (v) => switch (v) {
+        0 => state.refresh(),
+        2 => showLanguagePicker(context),
+        _ => state.signOut(),
+      },
+      itemBuilder: (_) => [
+        const PopupMenuItem(value: 0, child: Text('Actualiser la liste')),
+        if (state.languageOptions.isNotEmpty)
+          const PopupMenuItem(value: 2, child: Text('Mes langues…')),
+        const PopupMenuItem(value: 1, child: Text('Changer de fournisseur')),
       ],
     );
   }
 }
 
-/// Menus Pays / Genre / Année / Tri, partagés par les deux mises en page.
+/// Menus Langues / Genre / Année / Tri, partagés par les deux mises en page.
 class FilterMenus extends StatelessWidget {
   const FilterMenus({super.key, required this.vertical});
   final bool vertical;
@@ -247,16 +255,7 @@ class FilterMenus extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final menus = <Widget>[
-      if (state.countries.isNotEmpty)
-        _Dropdown<String?>(
-          value: state.country,
-          items: [
-            (null, '🌐 Tous les pays'),
-            for (final (code, count) in state.countries)
-              (code, '${Country.label(code)}  ($count)'),
-          ],
-          onChanged: (v) => state.country = v,
-        ),
+      if (state.languageOptions.isNotEmpty) const LanguageButton(),
       if (state.genreOptions.isNotEmpty)
         _Dropdown<String?>(
           value: state.genre,
@@ -524,6 +523,12 @@ class _EmptyState extends StatelessWidget {
             "Rien pour l'instant",
             'Ce que tu regardes apparaîtra ici.',
           )
+        : state.languages.isNotEmpty && state.totalCount == 0
+        ? (
+            Icons.translate_rounded,
+            'Rien dans tes langues',
+            'Cette rubrique ne contient rien dans les langues choisies.',
+          )
         : (Icons.tv_off_rounded, 'Liste vide', '');
     return Center(
       child: Column(
@@ -541,6 +546,11 @@ class _EmptyState extends StatelessWidget {
             TextButton(
               onPressed: state.clearFilters,
               child: const Text('Effacer les filtres'),
+            ),
+          if (state.languages.isNotEmpty && state.totalCount == 0)
+            TextButton(
+              onPressed: () => showLanguagePicker(context),
+              child: const Text('Changer de langues'),
             ),
         ],
       ),

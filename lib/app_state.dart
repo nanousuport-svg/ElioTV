@@ -58,7 +58,8 @@ class AppState extends ChangeNotifier {
   String? error;
 
   ContentKind _kind = ContentKind.live;
-  String? _country;
+  /// Langues (pays) choisies : seuls leurs chaînes, films et séries sont affichés. Vide = tout.
+  Set<String> _languages = {};
   String _category = allId;
   String _search = '';
   String? _genre;
@@ -87,35 +88,52 @@ class AppState extends ChangeNotifier {
   final Map<String, String> _categoryNames = {};
   final Map<String, String> _itemCountry = {};
   final Map<ContentKind, List<(String, int)>> _countriesByKind = {};
+  List<(String, int)> _languageOptions = [];
   int _detailToken = 0;
 
   // MARK: Accès en lecture
 
   ContentKind get kind => _kind;
-  String? get country => _country;
+  Set<String> get languages => _languages;
   String get category => _category;
   String get search => _search;
   String? get genre => _genre;
   YearFilter? get yearFilter => _yearFilter;
   SortOrder get sortOrder => _sortOrder;
 
-  List<(String, int)> get countries => _countriesByKind[_kind] ?? [];
+  /// Langues proposées (code, nombre de contenus), toutes rubriques confondues.
+  List<(String, int)> get languageOptions => _languageOptions;
+
+  /// Faut-il proposer le choix des langues ? Une seule fois par fournisseur, s'il y a le choix.
+  bool get shouldAskLanguages {
+    final id = active?.id;
+    return id != null &&
+        _languageOptions.where((e) => e.$1 != Country.other).length >= 2 &&
+        !Storage.prefs.containsKey('languages.$id');
+  }
+
+  /// Une rubrique dont aucun pays n'est reconnu (films rangés par genre seulement, par exemple)
+  /// reste entièrement visible : la filtrer la viderait.
+  bool _filtersKind(ContentKind k) =>
+      _languages.isNotEmpty && _countriesByKind.containsKey(k);
 
   List<MediaCategory> get categories {
     final all = _categoriesByKind[_kind] ?? [];
-    if (_country == null) return all;
+    if (!_filtersKind(_kind)) return all;
     return all
-        .where((c) => (_categoryCountry[c.id] ?? Country.other) == _country)
+        .where(
+          (c) => _languages.contains(_categoryCountry[c.id] ?? Country.other),
+        )
         .toList();
   }
 
-  int get totalCount => _itemsForCountry.length;
+  int get totalCount => _itemsInLanguages.length;
 
-  List<MediaItem> get _itemsForCountry {
+  List<MediaItem> get _itemsInLanguages {
     final list = _itemsByKind[_kind] ?? [];
-    if (_country == null) return list;
+    if (!_filtersKind(_kind)) return list;
     return list
-        .where((i) => (_itemCountry[i.id] ?? Country.other) == _country)
+        .where((i) => _languages.contains(_itemCountry[i.id] ?? Country.other))
         .toList();
   }
 
@@ -149,14 +167,12 @@ class AppState extends ChangeNotifier {
     _update();
   }
 
-  set country(String? value) {
-    if (value == _country) return;
-    _country = value;
+  /// Enregistre le choix (même vide : « toutes les langues » est aussi un choix).
+  set languages(Set<String> value) {
+    _languages = {...value};
     final id = active?.id;
     if (id != null) {
-      value == null
-          ? Storage.prefs.remove('country.$id')
-          : Storage.prefs.setString('country.$id', value);
+      Storage.prefs.setStringList('languages.$id', _languages.toList());
     }
     if (!_category.startsWith('__') &&
         !categories.any((c) => c.id == _category))
@@ -292,7 +308,7 @@ class AppState extends ChangeNotifier {
     Storage.saveProfiles(profiles);
     Storage.deleteCatalog(profile.id);
     Storage.setPassword(profile.id, null);
-    for (final k in ['fav', 'recent', 'country']) {
+    for (final k in ['fav', 'recent', 'country', 'languages']) {
       Storage.prefs.remove('$k.${profile.id}');
     }
     notifyListeners();
@@ -310,7 +326,11 @@ class AppState extends ChangeNotifier {
     favorites = (Storage.prefs.getStringList('fav.${profile.id}') ?? [])
         .toSet();
     recents = Storage.prefs.getStringList('recent.${profile.id}') ?? [];
-    _country = Storage.prefs.getString('country.${profile.id}');
+    final legacyCountry = Storage.prefs.getString('country.${profile.id}');
+    _languages =
+        (Storage.prefs.getStringList('languages.${profile.id}') ??
+                [?legacyCountry])
+            .toSet();
     _kind = ContentKind.live;
     _sortOrder = SortOrder.provider;
     _category = allId;
@@ -535,19 +555,26 @@ class AppState extends ChangeNotifier {
           ),
         );
     }
-    if (c.items.isNotEmpty &&
-        _country != null &&
-        !_countriesByKind.values.any((l) => l.any((e) => e.$1 == _country))) {
-      _country = null;
+    final all = <String, int>{};
+    for (final list in _countriesByKind.values) {
+      for (final (code, n) in list) {
+        all[code] = (all[code] ?? 0) + n;
+      }
     }
+    _languageOptions = all.entries.map((e) => (e.key, e.value)).toList()
+      ..sort(
+        (a, b) => (b.$1 == Country.other ? -1 : b.$2).compareTo(
+          a.$1 == Country.other ? -1 : a.$2,
+        ),
+      );
   }
 
   void _update() {
-    final list = _itemsForCountry;
+    final list = _itemsInLanguages;
     _refreshFacets(list);
     var base = switch (_category) {
       allId => list,
-      // Favoris et récents restent visibles quel que soit le pays choisi.
+      // Favoris et récents restent visibles quelles que soient les langues choisies.
       favoritesId =>
         (_itemsByKind[_kind] ?? [])
             .where((i) => favorites.contains(i.id))
@@ -560,7 +587,7 @@ class AppState extends ChangeNotifier {
             .toList(),
       _ => list.where((i) => i.categoryId == _category).toList(),
     };
-    // Genre et année s'ajoutent au pays (la langue) et à la catégorie.
+    // Genre et année s'ajoutent aux langues et à la catégorie.
     if (_genre != null)
       base = base.where((i) => i.genres.contains(_genre)).toList();
     if (_yearFilter != null)
@@ -600,10 +627,10 @@ class AppState extends ChangeNotifier {
     return copy;
   }
 
-  /// Genres et années proposés : ceux qui existent pour l'onglet et le pays choisis.
+  /// Genres et années proposés : ceux qui existent pour l'onglet et les langues choisis.
   void _refreshFacets(List<MediaItem> list) {
     final key =
-        '${_kind.name}|$_country|${catalog.updated.millisecondsSinceEpoch}';
+        '${_kind.name}|${(_languages.toList()..sort()).join(',')}|${catalog.updated.millisecondsSinceEpoch}';
     if (key == _facetsKey) return;
     _facetsKey = key;
     if (_kind == ContentKind.live) {
