@@ -569,7 +569,7 @@ function Hero({ onVideo }: { onVideo: () => void }) {
           className="inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/[.03] py-1.5 pr-4 pl-2 text-sm text-white/65"
         >
           <b className={`rounded-full px-2.5 py-[3px] text-xs font-semibold text-white ${GRADIENT}`}>Nouveau</b>
-          Gratuit · Sans publicité · Version 1.0.2
+          Gratuit · Sans publicité · Version 1.1.0
         </motion.span>
         <motion.h1 variants={fadeUp} className="mx-auto mt-7 text-[clamp(52px,9.5vw,112px)] leading-[.98] font-bold tracking-[-0.045em]">
           Ta télé,
@@ -816,7 +816,7 @@ function Features() {
 
           <Card>
             <CardTitle>Trié pour toi.</CardTitle>
-            <CardText>Par pays, genre et année.</CardText>
+            <CardText>Choisis tes langues, le reste disparaît. Puis par genre et année.</CardText>
             <div aria-hidden className="mt-auto flex flex-wrap gap-2 pt-7">
               {['FR', 'BE', 'CH', 'CA', 'MA', 'UK', 'Comédie', '2024'].map((p, i) => (
                 <span
