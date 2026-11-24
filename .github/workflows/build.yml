@@ -15,6 +15,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.47.9
           cache: true
       - run: for i in 1 2 3; do flutter build windows --release && exit 0; echo "Essai $i échoué, nouvel essai dans 60 s"; sleep 60; done; exit 1
         shell: bash
@@ -45,6 +46,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.47.9
           cache: true
       # Le serveur de téléchargement de Gradle est parfois indisponible (erreurs 503/504) : 3 essais.
       - run: for i in 1 2 3; do flutter build apk --release && exit 0; echo "Essai $i échoué, nouvel essai dans 60 s"; sleep 60; done; exit 1
