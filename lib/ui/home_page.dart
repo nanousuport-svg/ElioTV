@@ -5,6 +5,7 @@ import '../app_state.dart';
 import '../device.dart';
 import '../models.dart';
 import '../player.dart';
+import 'epg_view.dart';
 import 'language_picker.dart';
 import 'player_view.dart';
 import 'theme.dart';
@@ -467,14 +468,8 @@ class ItemTile extends StatelessWidget {
   }
 
   Widget? _subtitle() {
-    if (item.kind == ContentKind.live) {
-      return item.number == null
-          ? null
-          : Text(
-              '${item.number}',
-              style: const TextStyle(fontSize: 12, color: Colors.white54),
-            );
-    }
+    // Chaîne : numéro et ce qui passe en ce moment (guide TV).
+    if (item.kind == ContentKind.live) return EpgLine(item: item);
     final parts = [
       if (item.year != null) '${item.year}',
       if (item.rating != null)
@@ -639,8 +634,16 @@ class NowPlayingBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    return ListenableBuilder(
+      listenable: state.epgStore,
+      builder: (context, _) => _build(context, state),
+    );
+  }
+
+  Widget _build(BuildContext context, AppState state) {
     final p = context.watch<PlayerController>();
-    final now = state.epg.firstOrNull;
+    final now = state.epg.where((e) => e.isOnAir(DateTime.now())).firstOrNull;
+    final next = state.epg.where((e) => e != now).firstOrNull;
     final info = p.mediaInfo;
     return Container(
       color: Colors.white.withValues(alpha: 0.04),
@@ -713,9 +716,9 @@ class NowPlayingBar extends StatelessWidget {
                       minHeight: 3,
                     ),
                   ),
-                  if (state.epg.length > 1)
+                  if (next != null)
                     Text(
-                      'Ensuite : ${state.epg[1].title}',
+                      'Ensuite : ${_hm(next.start)} ${next.title}',
                       maxLines: 1,
                       style: const TextStyle(
                         fontSize: 11,
@@ -731,6 +734,12 @@ class NowPlayingBar extends StatelessWidget {
               ],
             ),
           ),
+          if (item.kind == ContentKind.live && state.epgStore.available)
+            IconButton(
+              tooltip: 'Programme de la chaîne',
+              icon: const Icon(Icons.event_note_rounded),
+              onPressed: () => showProgramme(context, item),
+            ),
           IconButton(
             tooltip: 'Favori',
             icon: Icon(

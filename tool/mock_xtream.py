@@ -54,9 +54,11 @@ class H(BaseHTTPRequestHandler):
                 {"id": "900", "episode_num": 1, "title": "Pilote", "container_extension": "mp4", "season": 1, "info": {"plot": "Le début", "duration": "00:10:00"}},
                 {"id": "901", "episode_num": 2, "title": "Suite", "container_extension": "mp4", "season": 1}], "2": [
                 {"id": "902", "episode_num": 1, "title": "Saison 2", "container_extension": "mp4", "season": 2}]}})
-            if a == "get_short_epg": return self.send_json({"epg_listings": [
-                {"title": b64("Journal de 20h"), "description": b64("Infos"), "start_timestamp": str(now - 600), "stop_timestamp": str(now + 1200)},
-                {"title": b64("Film du soir"), "start_timestamp": str(now + 1200), "stop_timestamp": str(now + 7200)}]})
+            if a == "get_short_epg":
+                t = int(time.time())  # horaires calculés à chaque demande : toujours « en cours »
+                return self.send_json({"epg_listings": [
+                {"title": b64("Journal de 20h"), "description": b64("Infos"), "start_timestamp": str(t - 600), "stop_timestamp": str(t + 1200)},
+                {"title": b64("Film du soir"), "start_timestamp": str(t + 1200), "stop_timestamp": str(t + 7200)}]})
             return self.send_json([])
         p = u.path
         if LIVE_TS and p.endswith("/77.ts"): return self.send_live()

@@ -4,7 +4,7 @@
 
 #define AppName "ElioTV"
 #ifndef AppVersion
-  #define AppVersion "1.1.0"
+  #define AppVersion "1.2.0"
 #endif
 #define BuildDir "..\..\build\windows\x64\runner\Release"
 

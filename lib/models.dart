@@ -214,10 +214,18 @@ class SeriesDetails {
 }
 
 class EpgEntry {
-  EpgEntry({required this.title, required this.start, required this.end});
+  EpgEntry({
+    required this.title,
+    required this.start,
+    required this.end,
+    this.description = '',
+  });
   final String title;
   final DateTime start;
   final DateTime end;
+  final String description;
+
+  bool isOnAir(DateTime now) => !start.isAfter(now) && end.isAfter(now);
 
   double progress(DateTime now) {
     final total = end.difference(start).inSeconds;

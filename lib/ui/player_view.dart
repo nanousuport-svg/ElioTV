@@ -8,8 +8,9 @@ import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../device.dart';
+import '../models.dart';
 import '../player.dart';
-import 'theme.dart';
+import 'epg_view.dart';
 
 /// Image vidéo + états (chargement, erreur) + commandes qui apparaissent au mouvement de la souris ou au toucher.
 class PlayerSurface extends StatefulWidget {
@@ -27,9 +28,12 @@ class _PlayerSurfaceState extends State<PlayerSurface> {
   void _show() {
     setState(() => controlsVisible = true);
     _hide?.cancel();
-    _hide = Timer(const Duration(seconds: 3), () {
-      if (mounted) setState(() => controlsVisible = false);
-    });
+    _hide = Timer(const Duration(milliseconds: 2500), _hideNow);
+  }
+
+  void _hideNow() {
+    _hide?.cancel();
+    if (mounted) setState(() => controlsVisible = false);
   }
 
   @override
@@ -44,6 +48,11 @@ class _PlayerSurfaceState extends State<PlayerSurface> {
     final showControls = controlsVisible || p.status == PlayerStatus.paused;
     return MouseRegion(
       onHover: (_) => _show(),
+      // La souris quitte la vidéo : la barre s'efface aussitôt ; en plein écran, le curseur aussi.
+      onExit: (_) => _hideNow(),
+      cursor: widget.fullscreen && !showControls
+          ? SystemMouseCursors.none
+          : MouseCursor.defer,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _show,
@@ -69,12 +78,15 @@ class _PlayerSurfaceState extends State<PlayerSurface> {
               _Failure(message: p.failure ?? ''),
             if (p.status == PlayerStatus.playing ||
                 p.status == PlayerStatus.paused)
-              AnimatedOpacity(
-                opacity: showControls ? 1 : 0,
-                duration: const Duration(milliseconds: 200),
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: PlayerControls(fullscreen: widget.fullscreen),
+              IgnorePointer(
+                ignoring: !showControls,
+                child: AnimatedOpacity(
+                  opacity: showControls ? 1 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: PlayerControls(fullscreen: widget.fullscreen),
+                  ),
                 ),
               ),
           ],
@@ -160,86 +172,115 @@ class PlayerControls extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.watch<PlayerController>();
     final player = p.player;
+    // Pas de cadre noir sur l'image : un léger dégradé en bas, juste assez pour lire les boutons.
     return Container(
-      margin: const EdgeInsets.all(14),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      constraints: const BoxConstraints(maxWidth: 860),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(14),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(8, 36, 8, 4),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x00000000), Color(0x8C000000)],
+        ),
       ),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: 'Lecture / Pause',
-            icon: Icon(
-              p.status == PlayerStatus.paused
-                  ? Icons.play_arrow_rounded
-                  : Icons.pause_rounded,
-            ),
-            onPressed: p.togglePause,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 860),
+          child: LayoutBuilder(
+            builder: (context, size) =>
+                _controlsRow(context, p, player, size.maxWidth < 520),
           ),
-          if (p.isLive) ...[
-            const Icon(Icons.circle, color: Colors.red, size: 10),
-            const SizedBox(width: 6),
-            const Text(
-              'EN DIRECT',
-              style: TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
+        ),
+      ),
+    );
+  }
+
+  Widget _controlsRow(
+    BuildContext context,
+    PlayerController p,
+    Player player,
+    bool compact,
+  ) {
+    return Row(
+      children: [
+        IconButton(
+          tooltip: 'Lecture / Pause',
+          icon: Icon(
+            p.status == PlayerStatus.paused
+                ? Icons.play_arrow_rounded
+                : Icons.pause_rounded,
+          ),
+          onPressed: p.togglePause,
+        ),
+        if (p.isLive) ...[
+          const Icon(Icons.circle, color: Colors.red, size: 10),
+          const SizedBox(width: 6),
+          const Text(
+            'EN DIRECT',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
             ),
-            const Spacer(),
-          ] else
-            Expanded(child: _SeekBar(player: player)),
-          if (Device.isDesktop) _VolumeControl(player: player),
-          if (p.audioTracks.length > 1)
-            PopupMenuButton<AudioTrack>(
-              tooltip: 'Piste audio',
-              icon: const Icon(Icons.graphic_eq_rounded),
-              onSelected: player.setAudioTrack,
-              itemBuilder: (_) => [
-                for (final t in p.audioTracks)
-                  CheckedPopupMenuItem(
-                    value: t,
-                    checked: player.state.track.audio.id == t.id,
-                    child: Text(trackLabel(t)),
-                  ),
-              ],
-            ),
-          if (p.subtitleTracks.isNotEmpty)
-            PopupMenuButton<SubtitleTrack>(
-              tooltip: 'Sous-titres',
-              icon: const Icon(Icons.closed_caption_outlined),
-              onSelected: player.setSubtitleTrack,
-              itemBuilder: (_) => [
+          ),
+          const Spacer(),
+        ] else
+          Expanded(child: _SeekBar(player: player)),
+        if (Device.isDesktop) _VolumeControl(player: player, slider: !compact),
+        if (p.isLive && context.read<AppState>().epgStore.available)
+          IconButton(
+            tooltip: 'Programme de la chaîne',
+            icon: const Icon(Icons.event_note_rounded),
+            onPressed: () {
+              final item = context.read<AppState>().selectedItem;
+              if (item != null) showProgramme(context, item);
+            },
+          ),
+        if (p.audioTracks.length > 1)
+          PopupMenuButton<AudioTrack>(
+            tooltip: 'Piste audio',
+            icon: const Icon(Icons.graphic_eq_rounded),
+            onSelected: player.setAudioTrack,
+            itemBuilder: (_) => [
+              for (final t in p.audioTracks)
                 CheckedPopupMenuItem(
-                  value: SubtitleTrack.no(),
-                  checked: player.state.track.subtitle.id == 'no',
-                  child: const Text('Désactivés'),
+                  value: t,
+                  checked: player.state.track.audio.id == t.id,
+                  child: Text(trackLabel(t)),
                 ),
-                for (final t in p.subtitleTracks)
-                  CheckedPopupMenuItem(
-                    value: t,
-                    checked: player.state.track.subtitle.id == t.id,
-                    child: Text(trackLabel(t)),
-                  ),
-              ],
-            ),
-          IconButton(
-            tooltip: fullscreen ? 'Quitter le plein écran' : 'Plein écran',
-            icon: Icon(
-              fullscreen
-                  ? Icons.fullscreen_exit_rounded
-                  : Icons.fullscreen_rounded,
-            ),
-            onPressed: () => fullscreen
-                ? Navigator.maybePop(context)
-                : openFullscreen(context),
+            ],
           ),
-        ],
-      ),
+        if (p.subtitleTracks.isNotEmpty)
+          PopupMenuButton<SubtitleTrack>(
+            tooltip: 'Sous-titres',
+            icon: const Icon(Icons.closed_caption_outlined),
+            onSelected: player.setSubtitleTrack,
+            itemBuilder: (_) => [
+              CheckedPopupMenuItem(
+                value: SubtitleTrack.no(),
+                checked: player.state.track.subtitle.id == 'no',
+                child: const Text('Désactivés'),
+              ),
+              for (final t in p.subtitleTracks)
+                CheckedPopupMenuItem(
+                  value: t,
+                  checked: player.state.track.subtitle.id == t.id,
+                  child: Text(trackLabel(t)),
+                ),
+            ],
+          ),
+        IconButton(
+          tooltip: fullscreen ? 'Quitter le plein écran' : 'Plein écran',
+          icon: Icon(
+            fullscreen
+                ? Icons.fullscreen_exit_rounded
+                : Icons.fullscreen_rounded,
+          ),
+          onPressed: () => fullscreen
+              ? Navigator.maybePop(context)
+              : openFullscreen(context),
+        ),
+      ],
     );
   }
 }
@@ -307,8 +348,11 @@ class _SeekBarState extends State<_SeekBar> {
 }
 
 class _VolumeControl extends StatelessWidget {
-  const _VolumeControl({required this.player});
+  const _VolumeControl({required this.player, required this.slider});
   final Player player;
+
+  /// Faux dans le petit lecteur : le bouton muet suffit, la barre prendrait trop de place.
+  final bool slider;
 
   @override
   Widget build(BuildContext context) {
@@ -328,14 +372,15 @@ class _VolumeControl extends StatelessWidget {
               ),
               onPressed: () => player.setVolume(volume == 0 ? 100 : 0),
             ),
-            SizedBox(
-              width: 90,
-              child: Slider(
-                value: volume.clamp(0, 100),
-                max: 100,
-                onChanged: player.setVolume,
+            if (slider)
+              SizedBox(
+                width: 90,
+                child: Slider(
+                  value: volume.clamp(0, 100),
+                  max: 100,
+                  onChanged: player.setVolume,
+                ),
               ),
-            ),
           ],
         );
       },
@@ -364,13 +409,31 @@ class FullscreenPlayerPage extends StatefulWidget {
 }
 
 class _FullscreenPlayerPageState extends State<FullscreenPlayerPage> {
-  String? _banner;
+  bool _banner = false;
   Timer? _bannerTimer;
 
   @override
   void initState() {
     super.initState();
     defaultEnterNativeFullscreen();
+    // À l'ouverture, comme à chaque zapping : chaîne, émission en cours et suivante.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showBanner());
+  }
+
+  void _showBanner() {
+    if (!mounted || !context.read<PlayerController>().isLive) return;
+    setState(() => _banner = true);
+    _bannerTimer?.cancel();
+    _bannerTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _banner = false);
+    });
+  }
+
+  void _programme() {
+    final item = context.read<AppState>().selectedItem;
+    if (item != null && context.read<PlayerController>().isLive) {
+      showProgramme(context, item);
+    }
   }
 
   @override
@@ -384,16 +447,13 @@ class _FullscreenPlayerPageState extends State<FullscreenPlayerPage> {
     final state = context.read<AppState>();
     if (!context.read<PlayerController>().isLive) return;
     state.zap(delta);
-    setState(() => _banner = state.selectedItem?.name);
-    _bannerTimer?.cancel();
-    _bannerTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _banner = null);
-    });
+    _showBanner();
   }
 
   @override
   Widget build(BuildContext context) {
     final p = context.read<PlayerController>();
+    final item = context.select<AppState, MediaItem?>((s) => s.selectedItem);
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.arrowUp): () => _zap(-1),
@@ -410,6 +470,12 @@ class _FullscreenPlayerPageState extends State<FullscreenPlayerPage> {
         const SingleActivator(LogicalKeyboardKey.mediaPlayPause): p.togglePause,
         const SingleActivator(LogicalKeyboardKey.escape): () =>
             Navigator.maybePop(context),
+        // Touches Guide / Info / Menu de la télécommande, ou G et I au clavier : le programme.
+        const SingleActivator(LogicalKeyboardKey.guide): _programme,
+        const SingleActivator(LogicalKeyboardKey.info): _programme,
+        const SingleActivator(LogicalKeyboardKey.contextMenu): _programme,
+        const SingleActivator(LogicalKeyboardKey.keyG): _programme,
+        const SingleActivator(LogicalKeyboardKey.keyI): _showBanner,
       },
       child: Focus(
         autofocus: true,
@@ -418,26 +484,14 @@ class _FullscreenPlayerPageState extends State<FullscreenPlayerPage> {
           body: Stack(
             children: [
               const Positioned.fill(child: PlayerSurface(fullscreen: true)),
-              if (_banner != null)
+              if (_banner && item != null)
                 Positioned(
                   top: 24,
                   left: 24,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: Brand.gradient,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _banner!,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  right: 24,
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: NowNextBanner(item: item),
                   ),
                 ),
             ],

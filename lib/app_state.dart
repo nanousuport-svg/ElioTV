@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 
 import 'country.dart';
+import 'epg_store.dart';
 import 'm3u.dart';
 import 'models.dart';
 import 'net.dart';
@@ -70,7 +71,8 @@ class AppState extends ChangeNotifier {
   MediaItem? selectedItem;
   Set<String> favorites = {};
   List<String> recents = [];
-  List<EpgEntry> epg = [];
+  /// Guide TV des chaînes affichées (Xtream).
+  final epgStore = EpgStore();
   SeriesDetails? series;
   bool isLoadingSeries = false;
   String? playingEpisodeId;
@@ -148,6 +150,15 @@ class AppState extends ChangeNotifier {
   }
 
   bool isFavorite(MediaItem item) => favorites.contains(item.id);
+
+  /// Programmes de la chaîne sélectionnée : en cours, puis à venir.
+  List<EpgEntry> get epg {
+    final item = selectedItem;
+    final id = item?.streamId;
+    return item?.kind == ContentKind.live && id != null
+        ? epgStore.upcoming(id)
+        : const [];
+  }
 
   // MARK: Navigation
 
@@ -322,6 +333,7 @@ class AppState extends ChangeNotifier {
     player.stop();
     active = profile;
     account = null;
+    epgStore.reset(_client(profile));
     _clearDetail();
     favorites = (Storage.prefs.getStringList('fav.${profile.id}') ?? [])
         .toSet();
@@ -359,6 +371,7 @@ class AppState extends ChangeNotifier {
 
   void signOut() {
     player.stop();
+    epgStore.reset(null);
     active = null;
     account = null;
     _clearDetail();
@@ -688,7 +701,6 @@ class AppState extends ChangeNotifier {
   void _clearDetail() {
     _detailToken++;
     selectedItem = null;
-    epg = [];
     series = null;
     isLoadingSeries = false;
     playingEpisodeId = null;
@@ -704,18 +716,6 @@ class AppState extends ChangeNotifier {
     if (url != null) {
       player.play(url, item.name, live: item.kind == ContentKind.live);
       _addRecent(item);
-      if (item.kind == ContentKind.live &&
-          item.streamId != null &&
-          client != null) {
-        client
-            .shortEpg(item.streamId!)
-            .then((entries) {
-              if (token != _detailToken) return;
-              epg = entries;
-              notifyListeners();
-            })
-            .catchError((_) {});
-      }
     } else if (item.seriesId != null && client != null) {
       player.stop();
       isLoadingSeries = true;

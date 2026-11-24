@@ -294,9 +294,10 @@ class XtreamClient {
     );
   }
 
-  Future<List<EpgEntry>> shortEpg(int streamId) async {
+  /// Programmes en cours et à venir de la chaîne (au plus [limit]).
+  Future<List<EpgEntry>> shortEpg(int streamId, {int limit = 4}) async {
     final root = await fetchJson(
-      _api('get_short_epg', {'stream_id': '$streamId', 'limit': '4'}),
+      _api('get_short_epg', {'stream_id': '$streamId', 'limit': '$limit'}),
     );
     final list = root is Map && root['epg_listings'] is List
         ? root['epg_listings'] as List
@@ -309,6 +310,7 @@ class XtreamClient {
                   J.integer(e['stop_timestamp']) != null)
                 EpgEntry(
                   title: J.base64Text(e['title']) ?? '',
+                  description: J.base64Text(e['description'])?.trim() ?? '',
                   start: DateTime.fromMillisecondsSinceEpoch(
                     J.integer(e['start_timestamp'])! * 1000,
                   ),
