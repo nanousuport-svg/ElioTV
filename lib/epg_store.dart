@@ -78,7 +78,12 @@ class EpgStore extends ChangeNotifier {
           .then(
             (entries) => _cache[id] = _Programmes(entries, DateTime.now()),
             // Pas de guide pour cette chaîne : on ne redemande pas avant un moment.
-            onError: (_) => _cache[id] = _Programmes(const [], DateTime.now()),
+            onError: (Object e) {
+              debugPrint(
+                'ElioTV guide : chaîne $id → erreur ${e is ElioError ? e.message : e.runtimeType}',
+              );
+              return _cache[id] = _Programmes(const [], DateTime.now());
+            },
           )
           .whenComplete(() {
             if (_client != client) return;

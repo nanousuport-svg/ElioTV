@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'genre.dart';
 import 'models.dart';
 import 'net.dart';
@@ -294,6 +295,23 @@ class XtreamClient {
     );
   }
 
+  static var _epgLogs = 0;
+
+  /// Diagnostic du guide TV (les 12 premières réponses) : forme de la réponse et noms des champs,
+  /// jamais l'adresse ni les identifiants.
+  static void _logEpg(int streamId, dynamic root, List list) {
+    if (_epgLogs++ >= 12) return;
+    final first = list.whereType<Map>().firstOrNull;
+    debugPrint(
+      'ElioTV guide : chaîne $streamId → ${root.runtimeType}, '
+      '${root is Map ? 'clés ${root.keys.toList()}' : ''} ${list.length} émissions'
+      '${first == null ? '' : ', champs ${first.keys.toList()}, '
+                'début=${first['start_timestamp'] ?? first['start']} '
+                'fin=${first['stop_timestamp'] ?? first['end']} '
+                'titre=${J.base64Text(first['title'])}'}',
+    );
+  }
+
   /// Programmes en cours et à venir de la chaîne (au plus [limit]).
   Future<List<EpgEntry>> shortEpg(int streamId, {int limit = 4}) async {
     final root = await fetchJson(
@@ -302,6 +320,7 @@ class XtreamClient {
     final list = root is Map && root['epg_listings'] is List
         ? root['epg_listings'] as List
         : const [];
+    _logEpg(streamId, root, list);
     final now = DateTime.now();
     final entries =
         <EpgEntry>[

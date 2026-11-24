@@ -17,7 +17,7 @@ void main() {
 
   testWidgets('pas de mise en mémoire à répétition en direct', (tester) async {
     MediaKit.ensureInitialized();
-    await Storage.init();
+    await Storage.init(forTests: true);
     await LiveRelay.start();
     final state = AppState();
     final player = state.player;

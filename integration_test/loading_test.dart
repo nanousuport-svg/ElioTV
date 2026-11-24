@@ -16,7 +16,7 @@ void main() {
 
   testWidgets('la TV s\'affiche avant les films', (tester) async {
     MediaKit.ensureInitialized();
-    await Storage.init();
+    await Storage.init(forTests: true);
     final state = AppState();
     await tester.pumpWidget(
       MultiProvider(

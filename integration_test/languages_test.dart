@@ -49,7 +49,7 @@ void main() {
 
   testWidgets('seules les langues choisies restent visibles', (tester) async {
     MediaKit.ensureInitialized();
-    await Storage.init();
+    await Storage.init(forTests: true);
     final state = AppState();
     await tester.pumpWidget(
       MultiProvider(

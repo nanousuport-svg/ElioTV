@@ -17,7 +17,7 @@ void main() {
 
   testWidgets('pas de retour en arrière après une reconnexion', (tester) async {
     MediaKit.ensureInitialized();
-    await Storage.init();
+    await Storage.init(forTests: true);
     await LiveRelay.start();
     final state = AppState();
     final player = state.player;

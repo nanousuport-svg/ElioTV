@@ -29,7 +29,7 @@ void main() {
     tester,
   ) async {
     MediaKit.ensureInitialized();
-    await Storage.init();
+    await Storage.init(forTests: true);
     await LiveRelay.start();
     final state = AppState();
     await tester.pumpWidget(

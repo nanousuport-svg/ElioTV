@@ -13,8 +13,14 @@ class Storage {
   static late Directory _dir;
   static late SharedPreferences prefs;
 
-  static Future<void> init() async {
+  /// [forTests] : dossier et préférences à part, pour que les tests ne touchent jamais
+  /// aux fournisseurs ni aux réglages de l'utilisateur sur la même machine.
+  static Future<void> init({bool forTests = false}) async {
     _dir = await getApplicationSupportDirectory();
+    if (forTests) {
+      _dir = Directory('${_dir.path}/tests');
+      SharedPreferences.setPrefix('flutter.tests.');
+    }
     await _dir.create(recursive: true);
     prefs = await SharedPreferences.getInstance();
   }
